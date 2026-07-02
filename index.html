@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>NYC Parks — Interactive Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
+
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.3/mapbox-gl-geocoder.css" type="text/css" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.3/mapbox-gl-geocoder.min.js"></script>
+  <script src="config.js"></script>
+
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #map { position: absolute; inset: 0; }
+
+    #legend {
+      position: absolute;
+      bottom: 30px;
+      left: 12px;
+      background: rgba(255,255,255,0.92);
+      border-radius: 6px;
+      padding: 12px 17px;
+      font-size: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      line-height: 1.8;
+    }
+    #legend h4 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+    .legend-row { display: flex; align-items: center; gap: 8px; }
+    .legend-swatch { width: 17px; height: 17px; border-radius: 3px; flex-shrink: 0; }
+
+    .mapboxgl-popup-content { font-size: 13px; line-height: 1.5; max-width: 220px; }
+    .mapboxgl-popup-content strong { display: block; margin-bottom: 4px; }
+
+    #info-panel {
+      position: absolute;
+      top: 60px;
+      left: 10px;
+      width: 484px;
+      box-sizing: border-box;
+      background: rgba(255,255,255,0.95);
+      border-radius: 6px;
+      padding: 28px 30px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      font-size: 22px;
+      line-height: 1.6;
+      z-index: 1;
+    }
+    #info-panel h2 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .mapboxgl-ctrl-geocoder.mapboxgl-ctrl {
+      font-size: 18px;
+      width: 484px !important;
+      max-width: 484px !important;
+    }
+    .mapboxgl-ctrl-geocoder input[type='text'] {
+      font-size: 18px;
+      padding: 8px 45px;
+    }
+    #info-panel p {
+      margin: 0 0 12px;
+      color: #444;
+    }
+    #info-panel p:last-child {
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="info-panel">
+    <h2>Parks for Playing and Parks for Laying</h2>
+    <p>NYC Parks keeps a detailed list of every park in the city, and what it is for. Have you ever thought to yourself, "I'd really love to go relax in the park today, but I don't know if I should play baseball instead?"</p>
+    <p>Well now you no longer have to worry. With this handy map, you can see which parks are for playing (Active) and which parks are for Laying (Passive) according to the Parks department. Also, find parks you didn't know existed! Click on them, visit them, touch grass!</p>
+  </div>
+
+  <div id="legend">
+    <h4>Recreation Category</h4>
+    <div class="legend-row"><div class="legend-swatch" style="background:#2ccd64"></div> Active</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:#3f96f3"></div> Passive</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:#999"></div> Other</div>
+  </div>
+
+  <script>
+    mapboxgl.accessToken = MB_TOKEN;
+
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/light-v11',
+      center: [-73.98, 40.70],
+      zoom: 11.8
+    });
+
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    const geocoder = new MapboxGeocoder({
+      accessToken: mapboxgl.accessToken,
+      mapboxgl: mapboxgl,
+      placeholder: 'Search address…',
+      bbox: [-74.26, 40.48, -73.68, 40.92] // keep searches within NYC
+    });
+    map.addControl(geocoder, 'top-left');
+
+    map.on('load', () => {
+      map.addSource('parks', {
+        type: 'geojson',
+        data: 'NYC_Parks_Active_and_Passive_Recreation_20260702.geojson',
+        promoteId: 'gispropnum'
+      });
+
+      map.addLayer({
+        id: 'parks-fill',
+        type: 'fill',
+        source: 'parks',
+        paint: {
+          'fill-color': [
+            'match', ['get', 'recreation_category'],
+            'Active',  '#2d9e55',
+            'Passive', '#4a90d9',
+            '#999999'
+          ],
+          'fill-opacity': [
+            'case', ['boolean', ['feature-state', 'hover'], false], 0.9, 0.6
+          ]
+        }
+      });
+
+      map.addLayer({
+        id: 'parks-line',
+        type: 'line',
+        source: 'parks',
+        paint: { 'line-color': '#ffffff', 'line-width': 0.5 }
+      });
+
+      // Hover highlight
+      let hoveredId = null;
+
+      map.on('mousemove', 'parks-fill', (e) => {
+        map.getCanvas().style.cursor = 'pointer';
+        if (e.features.length > 0) {
+          if (hoveredId !== null) {
+            map.setFeatureState({ source: 'parks', id: hoveredId }, { hover: false });
+          }
+          hoveredId = e.features[0].id;
+          map.setFeatureState({ source: 'parks', id: hoveredId }, { hover: true });
+        }
+      });
+
+      map.on('mouseleave', 'parks-fill', () => {
+        map.getCanvas().style.cursor = '';
+        if (hoveredId !== null) {
+          map.setFeatureState({ source: 'parks', id: hoveredId }, { hover: false });
+        }
+        hoveredId = null;
+      });
+
+      // Click popup
+      map.on('click', 'parks-fill', (e) => {
+        const p = e.features[0].properties;
+        const acres = parseFloat(p.acres);
+        new mapboxgl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(`
+            <strong>${p.public_open_space_name || 'Unnamed Park'}</strong>
+            <div><b>Type:</b> ${p.type_category || '—'}</div>
+            <div><b>Category:</b> ${p.recreation_category || '—'}</div>
+            <div><b>Borough:</b> ${p.borough || '—'}</div>
+            <div><b>Acres:</b> ${isNaN(acres) ? '—' : acres.toFixed(1)}</div>
+          `)
+          .addTo(map);
+      });
+    });
+
+    // Surface any map/tile/token errors in the console instead of failing silently.
+    map.on('error', (e) => console.error('Mapbox error:', e.error && e.error.message ? e.error.message : e));
+  </script>
+</body>
+</html>

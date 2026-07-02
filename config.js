@@ -1,0 +1,1 @@
+const MB_TOKEN = 'pk.eyJ1IjoiY2NiMjE5NSIsImEiOiJjbXF0bXM0cTMwbDJtMnBwenA1bjgzNmtzIn0.cWU4yS8dsAqDB4B3ArHU8Q';
